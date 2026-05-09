@@ -13,18 +13,8 @@ load_dotenv(dotenv_path)
 
 TOKEN = os.getenv("BOT_TOKEN")
 
-# Проверка, чтобы бот не падал с непонятной ошибкой
 if not TOKEN:
-    try:
-        with open(".env", "r") as f:
-            for line in f:
-                if line.startswith("BOT_TOKEN="):
-                    TOKEN = line.strip().split("=")[1]
-    except:
-        pass
-
-if not TOKEN:
-    print("❌ ОШИБКА: Токен не найден. Проверь файл .env еще раз.")
+    print("❌ ERROR: BOT_TOKEN not found in .env file.")
     exit()
 
 bot = Bot(token=TOKEN)
@@ -33,15 +23,24 @@ db = TaskManager()
 
 @dp.message(Command("start"))
 async def start_handler(message: Message):
-    await message.answer("🎓 FocusTrackBot готов к работе!\n/add - задача\n/list - список\n/focus - таймер\n/stats - прогресс\n/weather - погода в Астане")
+    await message.answer(
+        f"Hello, {message.from_user.first_name}!\n"
+        "🎓 **Welcome to FocusTrackBot!**\n\n"
+        "Available commands:\n"
+        "/add - Create a new task\n"
+        "/list - Show your task list\n"
+        "/focus - Start focus timer\n"
+        "/stats - View your progress\n"
+        "/weather - Current weather in Astana",
+        parse_mode="Markdown")
 
 @dp.message(Command("add"))
 async def add_task(message: Message, command: Command):
     if command.args:
         db.add_task(message.from_user.id, command.args)
-        await message.answer("✅ Задача добавлена! Посмотреть: /list")
+        await message.answer("✅ Task added! View it: /list")
     else:
-        await message.answer("Напиши название задачи после команды /add")
+        await message.answer("Write the task name after the /add command")
 
 @dp.message(Command("list"))
 async def list_tasks(message: Message):
@@ -49,9 +48,9 @@ async def list_tasks(message: Message):
     tasks = user_data.get("tasks", [])
     
     if not tasks:
-        return await message.answer("📝 Список пуст. Добавь задачу через /add")
+        return await message.answer("📝 Your list is empty. Add a task with /add.")
 
-    text = "📋 **Твои задачи:**\n"
+    text = "📋 **Your tasks:**\n"
     for t in tasks:
         status = "✅" if t["completed"] else "⏳"
         text += f"\n{status} **ID: {t['id']} — {t['title']}**\n"
@@ -59,7 +58,7 @@ async def list_tasks(message: Message):
             s_status = "🔹" if step["completed"] else "▫️"
             text += f"   {s_status} {step['title']}\n"
     
-    text += "\n💡 Чтобы добавить шаг: `/step [ID] [текст]`\n💡 Чтобы закрыть: `/done [ID]`"
+    text += "\n💡 To add a step: `/step [ID] [text]`\n💡 To complete: `/done [ID]`"
     await message.answer(text, parse_mode="Markdown")
 
 @dp.message(Command("focus"))
@@ -69,17 +68,17 @@ async def focus_menu(message: Message):
     builder.button(text="25 мин", callback_data="focus_25")
     builder.button(text="45 мин", callback_data="focus_45")
     builder.adjust(3)
-    await message.answer("Выбери время для фокусировки:", reply_markup=builder.as_markup())
+    await message.answer("Choose the time for focus:", reply_markup=builder.as_markup())
 
 @dp.callback_query(F.data.startswith("focus_"))
 async def start_focus(callback: CallbackQuery):
     minutes = int(callback.data.split("_")[1])
-    await callback.message.edit_text(f"🚀 Таймер запущен на {minutes} минут! Не отвлекайся.")
+    await callback.message.edit_text(f"🚀 Timer started for {minutes} minutes! Don't get distracted.")
     
     await asyncio.sleep(minutes * 60) 
     
     db.add_focus_session(callback.from_user.id, minutes)
-    await callback.message.answer(f"🏆 Время вышло! Ты заработала {minutes * 10} XP.")
+    await callback.message.answer(f"🏆 Time's up! You earned {minutes * 10} XP.")
 
 @dp.message(Command("step"))
 async def add_step_cmd(message: Message, command: Command):
@@ -88,26 +87,26 @@ async def add_step_cmd(message: Message, command: Command):
         task_id = int(args[0])
         step_name = args[1]
         if db.add_step(message.from_user.id, task_id, step_name):
-            await message.answer(f"✅ Шаг добавлен к задаче {task_id}")
+            await message.answer(f"✅ Step added to task {task_id}")
         else:
-            await message.answer("❌ Задача с таким ID не найдена.")
+            await message.answer("❌ Task with such ID not found.")
     except:
-        await message.answer("Пиши так: `/step 0 Купить книгу`")
+        await message.answer("Write like this: `/step 0 Buy a book`")
 
 @dp.message(Command("done"))
 async def done_cmd(message: Message, command: Command):
     try:
         task_id = int(command.args)
         if db.complete_task(message.from_user.id, task_id):
-            await message.answer(f"🎉 Задача {task_id} выполнена!")
+            await message.answer(f"🎉 Task {task_id} completed!")
         else:
-            await message.answer("❌ Задача не найдена.")
+            await message.answer("❌ Task not found.")
     except:
-        await message.answer("Пиши так: `/done 0`")
+        await message.answer("Write like this: `/done 0`")
 
 @dp.message(Command("weather"))
 async def get_weather(message: Message):
-    # Координаты Астаны (AITU)
+    # Координаты Аст
     url = "https://api.open-meteo.com/v1/forecast?latitude=51.18&longitude=71.45&current_weather=true"
     
     try:
@@ -120,20 +119,20 @@ async def get_weather(message: Message):
                     wind = current["windspeed"]
                     
                     # Маленький совет в зависимости от температуры
-                    advice = "Идеально, чтобы пойти в универ! 🏫" if temp > 10 else "Холодновато, лучше ботать дома или в коворкинге. ☕️"
+                    advice = "Perfect for going to university! 🏫" if temp > 10 else "A bit chilly, better to study at home or in a co-working space. ☕️"
                     
                     await message.answer(
-                        f"🌡 **Погода в Астане:**\n\n"
-                        f"Температура: {temp}°C\n"
-                        f"Скорость ветра: {wind} км/ч\n\n"
+                        f"🌡 **Weather in Astana:**\n\n"
+                        f"Temperature: {temp}°C\n"
+                        f"Wind speed: {wind} km/h\n\n"
                         f"💡 {advice}",
                         parse_mode="Markdown"
                     )
                 else:
-                    await message.answer("❌ Сервер погоды временно недоступен.")
+                    await message.answer("❌ Weather server is temporarily unavailable.")
     except Exception as e:
         print(f"Ошибка погоды: {e}")
-        await message.answer("❌ Произошла ошибка при получении погоды. Проверь интернет-соединение.")
+        await message.answer("❌ Error fetching weather data.")
 
 async def main():
     await dp.start_polling(bot)
